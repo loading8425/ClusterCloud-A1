@@ -1,27 +1,26 @@
 # from mpi4py import MPI
-import json
+import json, ijson
 from utils import split_json_file
-
+import re
 # comm = MPI.COMM_WORLD
 # rank = comm.Get_rank()
 
-#split_json_file('twitter-data-small.json','small',1000)
+sal_filename = "sal.json"
+filename = "twitter-data-small.json"
 
-with open('twitter-data-small.json','r', encoding="utf-8") as f:
-    for line in f.readlines():
-        try:
-            # 解析每行 JSON 对象
-            print(line)
-            obj = json.loads(line)
-            # 在这里对 obj 进行处理
-            print(obj)
+#load sal data
+with open(sal_filename, 'r') as f:
+    sal_data = json.load(f)
+print(sal_data["west island"])
+# load twitter data
+with open(filename, 'rb') as f:
+    objects = ijson.items(f, 'item')
+    num_objects = 0
+    for obj in objects:
+        num_objects += 1
+        if num_objects == 1000000:
             break
-        except Exception as e:
-            # 如果解析 JSON 对象时出现错误，则在这里处理异常
-            #print(f'Error: {e}')
-            pass
-    
-
+print(objects[0])
 
 # if rank == 0:
 #     data = {'a': 7, 'b': 3.14}
