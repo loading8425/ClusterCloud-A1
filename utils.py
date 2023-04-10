@@ -1,7 +1,7 @@
-import json, ijson
+import json, ijson ,re
 import os, math
 import time, queue
-from collections import Counter
+from collections import Counter, defaultdict
 import heapq
 
 # load sal data
@@ -9,28 +9,41 @@ sal_filename = "sal.json"
 with open(sal_filename, 'r') as f:
     sal_data = json.load(f)
 
-def process_data(data):
-    pass
-
 def compare_city_name(place: str):
-    p = place.lower().split(',')
+    p = place.lower().split(', ')
     if p[0] in sal_data.keys():
         gcc = sal_data[p[0]]["gcc"]
         return gcc
     elif len(p) > 1:
-        if p[1]==' melbourne' or p[1]==' victoria':
+        if p[1] in sal_data.keys():
+            gcc = sal_data[p[1]]["gcc"]
+            return gcc
+        if p[1]=='melbourne' or p[1]=='victoria':
             p[0] = p[0]+' (vic.)'
-        elif p[1]==' new south wales':
+        elif p[1]=='new south wales':
             p[0] = p[0]+' (nsw)'
-        elif p[1]==' queensland':
+        elif p[1]=='queensland':
             p[0] = p[0]+' (qld)'
-        elif p[1]==' south australia':
+        elif p[1]=='south australia':
             p[0] = p[0]+' (sa)'
+        elif p[1]=='Western Australia':
+            p[0] = p[0]+' (wa)'
             
         if p[0] in sal_data.keys():
             gcc = sal_data[p[0]]['gcc']
             return gcc
-    return -1
+    return None
+
+def tweet_processing(tweet, counters):
+    author_id = tweet['data']['author_id']
+    counters[0][author_id]+=1
+    place_name = tweet['includes']['places'][0]['full_name']
+    gcc = compare_city_name(place_name)
+    if gcc:
+        if not re.match(r'^.[r].*', gcc):
+            counters[1][gcc]+=1
+            counters[2][author_id][gcc] += 1
+
 
 def find_next_start_json(file_path, start):
     with open(file_path, 'rb') as file:
@@ -90,10 +103,12 @@ def read_one_json_obj(file_path, start)->list:
 # slower json read but no edit needed
 def process_large_json_file_v2(file_path, file_start, file_end=9999999999999):
     filesize = os.path.getsize(file_path)
-    file_end=filesize
-    location_tweets_count_dict = {'1gsyd':0,'2gmel':0,'3gbri':0,'4gade':0,'5gper':0,'6ghob':0}
-    visited_tweets = []
+    file_end=file_end if file_end < filesize else filesize
+    location_tweets_count= Counter()
     id_count = Counter()
+    id_count_with_location = defaultdict(Counter)
+    counters = [id_count,location_tweets_count, id_count_with_location]
+
     if file_start < 0:
         file_start = 0
     if file_start >= filesize:
@@ -128,29 +143,19 @@ def process_large_json_file_v2(file_path, file_start, file_end=9999999999999):
                 except:
                     pass
             last_obj = data["_id"]
-            # add first read object into visited list
-            if num_objects < 1:
-                visited_tweets.append([data["_id"], start])
             
             # print number of data
             num_objects += 1
-            # print_data = "Processing...."+str(round(file.tell() / filesize, 3)*100)+"% Number of data processed: "+str(num_objects)+"current _id:"+last_obj
+            # print_data = "% Number of data processed: "+str(num_objects)+"current _id:"+last_obj
             # print("\r{:3}".format(print_data),end=' ')
 
-            # extract place info
-            place = data["includes"]['places'][0]['full_name']
-            gcc = compare_city_name(place)
-            if gcc in location_tweets_count_dict.keys():
-                location_tweets_count_dict[gcc]+=1
-                id_count.update([data['data']['author_id']])
-            
+            # processing tweets data
+            tweet_processing(data, counters)
             # if end of file
             end = file.tell()
             if end >= file_end-1000:
                 break
-        visited_tweets.append([last_obj, file.tell()])
-
-    return location_tweets_count_dict, visited_tweets, id_count
+    return counters
 
 # fastest processing with ijson, but file editing is needed
 def process_large_json_file_v3(file_path, file_start, file_end=9999999999999):
